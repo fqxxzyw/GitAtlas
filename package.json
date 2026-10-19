@@ -16,7 +16,8 @@
     "build:desktop": "npm run build && electron-builder --win nsis portable --x64 --publish never",
     "format": "prettier --write src electron tests scripts",
     "test:ui": "node scripts/smoke.mjs",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "postinstall": "node node_modules/electron/install.js"
   },
   "dependencies": {
     "echarts": "^6.0.0",
@@ -52,12 +53,34 @@
   "build": {
     "appId": "io.github.fqxxzyw.gitatlas",
     "productName": "GitAtlas",
-    "directories": { "output": "release", "buildResources": "build" },
-    "files": ["dist/**/*", "dist-electron/**/*", "package.json"],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
     "asar": true,
     "npmRebuild": false,
-    "win": { "target": ["nsis", "portable"], "icon": "build/icon.ico", "signAndEditExecutable": false },
-    "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "artifactName": "GitAtlas-Setup-x64.exe" },
-    "portable": { "artifactName": "GitAtlas-Portable-x64.exe" }
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "GitAtlas-Setup-x64.exe"
+    },
+    "portable": {
+      "artifactName": "GitAtlas-Portable-x64.exe"
+    }
   }
 }

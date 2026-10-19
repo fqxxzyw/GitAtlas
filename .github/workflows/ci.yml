@@ -1,0 +1,69 @@
+name: Verify and build Windows
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build:desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - run: npm run test:ui
+        env:
+          GITATLAS_EXECUTABLE: release/win-unpacked/GitAtlas.exe
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem release/*.exe | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } | Set-Content release/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GitAtlas-Windows-x64
+          path: |
+            release/*.exe
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: GitAtlas-UI-evidence
+          path: |
+            docs/*.png
+            test-results/
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]')
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: GitAtlas-Windows-x64
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: GitAtlas-UI-evidence
+          path: evidence
+      - name: Publish verified Windows executables
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          gh release create "v$version" --target "$GITHUB_SHA" --title "GitAtlas v$version · Git 历史时光机" --notes-file docs/RELEASE.md release/*.exe release/SHA256SUMS.txt
+          zip -r GitAtlas-UI-evidence.zip evidence
+          gh release upload "v$version" GitAtlas-UI-evidence.zip

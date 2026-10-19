@@ -1,37 +1,407 @@
-import {useMemo,useState} from 'react';
-import {ArrowUpRight,GitMerge,Folder,GitCommitHorizontal} from 'lucide-react';
-import {motion,useReducedMotion} from 'framer-motion';
-import {useAtlas,day,fmt} from '../core/store';
-import {contributors,dailyActivity,compareSnapshots} from '../core/history';
-import type {FileChange} from '../core/model';
-import {Chart} from './Chart';
-import {Panel,SectionTitle,Metric,Empty,MagneticButton} from './ui';
-export function Growth(){
-  const{data,index,seek,set}=useAtlas();const reduced=useReducedMotion();
-  if(!data?.commits.length)return null;const commit=data.commits[index];const snapshot=data.snapshots[commit.hash];
-  const directories=new Map<string,number>();for(const f of snapshot.files){const directory=f.path.includes('/')?f.path.split('/').slice(0,-1).join('/'):'根目录';directories.set(directory,(directories.get(directory)??0)+1);}
-  return <div className="page"><SectionTitle eyebrow="THE SHAPE OF YOUR PROJECT" title="从一个想法，长成一片风景。" description="播放底部时间轴，观察目录随提交出现与扩展。" action={<span className="privacy-pill"><GitCommitHorizontal size={14}/>{commit.shortHash} · {day(commit.date)}</span>}/><Panel className="growth-stage"><div className="growth-center"><span className="growth-symbol"><GitMerge size={34}/></span><h2>{data.repository}</h2><p>{snapshot.totalFiles} 个文件 · {directories.size} 个目录</p></div><div className="directory-grid">{[...directories].slice(0,200).map(([name,count],i)=><motion.div key={name} layout={!reduced} initial={reduced?false:{scale:.85,opacity:0}} animate={{scale:1,opacity:1}} transition={{type:'spring',stiffness:220,damping:23}} className="directory-card" style={{'--directory-color':['#7b9ecb','#aa9bc3','#8caf9e','#bfaa90'][i%4]} as React.CSSProperties}><Folder size={23}/><strong>{name}</strong><span>{count} <small>files</small></span><div className="file-dots">{Array.from({length:Math.min(count,40)},(_,j)=><i key={j}/>)}</div></motion.div>)}</div>{directories.size>200&&<p className="muted">仅绘制前 200 个目录；完整路径可在文件页搜索。</p>}<div className="growth-caption"><span className="status-dot"/> {commit.message}</div></Panel><Panel><div className="panel-heading"><div><h3>变化最集中的提交</h3><p>仅展示变更规模，不评价提交质量</p></div></div><div className="largest-list">{[...data.commits].sort((a,b)=>b.stats.insertions+b.stats.deletions-a.stats.insertions-a.stats.deletions).slice(0,5).map(c=><button key={c.hash} onClick={()=>{seek(data.commits.findIndex(x=>x.hash===c.hash));set({view:'timeline'});}}><strong>{c.message}</strong><small>{day(c.date)}</small><span className="positive">+{fmt(c.stats.insertions)}</span><span className="negative">−{fmt(c.stats.deletions)}</span><ArrowUpRight size={16}/></button>)}</div></Panel></div>;
+import { useMemo, useState } from 'react';
+import { ArrowUpRight, GitMerge, Folder, GitCommitHorizontal } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { useAtlas, day, fmt } from '../core/store';
+import { contributors, dailyActivity, compareSnapshots } from '../core/history';
+import type { FileChange } from '../core/model';
+import { Chart } from './Chart';
+import { Panel, SectionTitle, Metric, Empty, MagneticButton } from './ui';
+export function Growth() {
+  const { data, index, seek, set } = useAtlas();
+  const reduced = useReducedMotion();
+  if (!data?.commits.length) return null;
+  const commit = data.commits[index];
+  const snapshot = data.snapshots[commit.hash];
+  const directories = new Map<string, number>();
+  for (const f of snapshot.files) {
+    const directory = f.path.includes('/') ? f.path.split('/').slice(0, -1).join('/') : '根目录';
+    directories.set(directory, (directories.get(directory) ?? 0) + 1);
+  }
+  return (
+    <div className="page">
+      <SectionTitle
+        eyebrow="THE SHAPE OF YOUR PROJECT"
+        title="从一个想法，长成一片风景。"
+        description="播放底部时间轴，观察目录随提交出现与扩展。"
+        action={
+          <span className="privacy-pill">
+            <GitCommitHorizontal size={14} />
+            {commit.shortHash} · {day(commit.date)}
+          </span>
+        }
+      />
+      <Panel className="growth-stage">
+        <div className="growth-center">
+          <span className="growth-symbol">
+            <GitMerge size={34} />
+          </span>
+          <h2>{data.repository}</h2>
+          <p>
+            {snapshot.totalFiles} 个文件 · {directories.size} 个目录
+          </p>
+        </div>
+        <div className="directory-grid">
+          {[...directories].slice(0, 200).map(([name, count], i) => (
+            <motion.div
+              key={name}
+              layout={!reduced}
+              initial={reduced ? false : { scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 220, damping: 23 }}
+              className="directory-card"
+              style={
+                {
+                  '--directory-color': ['#7b9ecb', '#aa9bc3', '#8caf9e', '#bfaa90'][i % 4],
+                } as React.CSSProperties
+              }
+            >
+              <Folder size={23} />
+              <strong>{name}</strong>
+              <span>
+                {count} <small>files</small>
+              </span>
+              <div className="file-dots">
+                {Array.from({ length: Math.min(count, 40) }, (_, j) => (
+                  <i key={j} />
+                ))}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+        {directories.size > 200 && <p className="muted">仅绘制前 200 个目录；完整路径可在文件页搜索。</p>}
+        <div className="growth-caption">
+          <span className="status-dot" /> {commit.message}
+        </div>
+      </Panel>
+      <Panel>
+        <div className="panel-heading">
+          <div>
+            <h3>变化最集中的提交</h3>
+            <p>仅展示变更规模，不评价提交质量</p>
+          </div>
+        </div>
+        <div className="largest-list">
+          {[...data.commits]
+            .sort((a, b) => b.stats.insertions + b.stats.deletions - a.stats.insertions - a.stats.deletions)
+            .slice(0, 5)
+            .map((c) => (
+              <button
+                key={c.hash}
+                onClick={() => {
+                  seek(data.commits.findIndex((x) => x.hash === c.hash));
+                  set({ view: 'timeline' });
+                }}
+              >
+                <strong>{c.message}</strong>
+                <small>{day(c.date)}</small>
+                <span className="positive">+{fmt(c.stats.insertions)}</span>
+                <span className="negative">−{fmt(c.stats.deletions)}</span>
+                <ArrowUpRight size={16} />
+              </button>
+            ))}
+        </div>
+      </Panel>
+    </div>
+  );
 }
-export function Activity(){
-  const{data}=useAtlas();const[period,setPeriod]=useState(365);
-  const computed=useMemo(()=>{
-    if(!data?.commits.length)return null;const daily=dailyActivity(data.commits);const dates=Object.keys(daily).sort();const end=new Date(dates.at(-1)!+'T00:00:00Z');const first=new Date(dates[0]+'T00:00:00Z');const start=new Date(period?Math.max(+first,+end-(period-1)*86400000):+first);start.setUTCDate(start.getUTCDate()-((start.getUTCDay()+6)%7));
-    const days=[];for(let t=+start;t<=+end;t+=86400000){const key=new Date(t).toISOString().slice(0,10);days.push({date:key,count:daily[key]??0});}
-    const weeks:Record<string,number>={};const weekdays=Array(7).fill(0) as number[];const hours=Array(24).fill(0) as number[];
-    for(const c of data.commits){const d=new Date(c.date.slice(0,10)+'T00:00:00Z');if(+d<+start)continue;weekdays[d.getUTCDay()]++;hours[Number(c.date.slice(11,13))]++;d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7));const key=d.toISOString().slice(0,10);weeks[key]=(weeks[key]??0)+1;}
-    const ordered=Object.entries(weeks).sort(([a],[b])=>a.localeCompare(b));return{days,weekdays,hours,labels:ordered.map(([d])=>d.slice(5)),values:ordered.map(([,n])=>n),end:dates.at(-1),total:days.reduce((n,d)=>n+d.count,0)};
-  },[data,period]);
-  if(!computed)return null;
-  return <div className="page"><SectionTitle eyebrow="A RHYTHM, NOT A SCORE" title="开发的节奏，藏在时间里。" description="按提交记录中的当地日期与小时统计，不代表真实编码时长。" action={<select aria-label="活动时间范围" value={period} onChange={e=>setPeriod(Number(e.target.value))}><option value={90}>最近 3 个月</option><option value={180}>最近 6 个月</option><option value={365}>最近 1 年</option><option value={0}>全部历史</option></select>}/><Panel className="activity-panel"><div className="panel-heading"><div><h3>{computed.total} 次提交的足迹</h3><p>截至 {computed.end} · 已加载历史</p></div><span className="privacy-pill">每一格，是一天</span></div><div className="heatmap-scroller"><div className="heatmap-labels"><span>一</span><span>三</span><span>五</span><span>日</span></div><div className="heatmap">{computed.days.map(d=><div key={d.date} className={`heat-cell heat-${Math.min(4,d.count)}`} title={`${d.date} · ${d.count} 次提交`} role="img" aria-label={`${d.date}，${d.count} 次提交`}/>)}</div></div><div className="heat-legend">少{[0,1,2,3,4].map(n=><i className={`heat-cell heat-${n}`} key={n}/>)}多</div></Panel><div className="metrics three"><Metric label="最活跃的一天" value={['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][computed.weekdays.indexOf(Math.max(...computed.weekdays))]} note="提交数量最多的星期"/><Metric label="最常出现的时刻" value={`${String(computed.hours.indexOf(Math.max(...computed.hours))).padStart(2,'0')}:00`} note="提交记录中的当地小时"/><Metric label="留下足迹的日子" value={fmt(computed.days.filter(d=>d.count>0).length)} note="所选范围内有提交的天数"/></div><Panel><div className="panel-heading"><div><h3>每周提交频率</h3><p>Commits by week</p></div></div><Chart labels={computed.labels} values={computed.values} type="bar" label="每周提交数"/></Panel></div>;
+export function Activity() {
+  const { data } = useAtlas();
+  const [period, setPeriod] = useState(365);
+  const computed = useMemo(() => {
+    if (!data?.commits.length) return null;
+    const daily = dailyActivity(data.commits);
+    const dates = Object.keys(daily).sort();
+    const end = new Date(dates.at(-1)! + 'T00:00:00Z');
+    const first = new Date(dates[0] + 'T00:00:00Z');
+    const start = new Date(period ? Math.max(+first, +end - (period - 1) * 86400000) : +first);
+    start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
+    const days = [];
+    for (let t = +start; t <= +end; t += 86400000) {
+      const key = new Date(t).toISOString().slice(0, 10);
+      days.push({ date: key, count: daily[key] ?? 0 });
+    }
+    const weeks: Record<string, number> = {};
+    const weekdays = Array(7).fill(0) as number[];
+    const hours = Array(24).fill(0) as number[];
+    for (const c of data.commits) {
+      const d = new Date(c.date.slice(0, 10) + 'T00:00:00Z');
+      if (+d < +start) continue;
+      weekdays[d.getUTCDay()]++;
+      hours[Number(c.date.slice(11, 13))]++;
+      d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+      const key = d.toISOString().slice(0, 10);
+      weeks[key] = (weeks[key] ?? 0) + 1;
+    }
+    const ordered = Object.entries(weeks).sort(([a], [b]) => a.localeCompare(b));
+    return {
+      days,
+      weekdays,
+      hours,
+      labels: ordered.map(([d]) => d.slice(5)),
+      values: ordered.map(([, n]) => n),
+      end: dates.at(-1),
+      total: days.reduce((n, d) => n + d.count, 0),
+    };
+  }, [data, period]);
+  if (!computed) return null;
+  return (
+    <div className="page">
+      <SectionTitle
+        eyebrow="A RHYTHM, NOT A SCORE"
+        title="开发的节奏，藏在时间里。"
+        description="按提交记录中的当地日期与小时统计，不代表真实编码时长。"
+        action={
+          <select
+            aria-label="活动时间范围"
+            value={period}
+            onChange={(e) => setPeriod(Number(e.target.value))}
+          >
+            <option value={90}>最近 3 个月</option>
+            <option value={180}>最近 6 个月</option>
+            <option value={365}>最近 1 年</option>
+            <option value={0}>全部历史</option>
+          </select>
+        }
+      />
+      <Panel className="activity-panel">
+        <div className="panel-heading">
+          <div>
+            <h3>{computed.total} 次提交的足迹</h3>
+            <p>截至 {computed.end} · 已加载历史</p>
+          </div>
+          <span className="privacy-pill">每一格，是一天</span>
+        </div>
+        <div className="heatmap-scroller">
+          <div className="heatmap-labels">
+            <span>一</span>
+            <span>三</span>
+            <span>五</span>
+            <span>日</span>
+          </div>
+          <div className="heatmap">
+            {computed.days.map((d) => (
+              <div
+                key={d.date}
+                className={`heat-cell heat-${Math.min(4, d.count)}`}
+                title={`${d.date} · ${d.count} 次提交`}
+                role="img"
+                aria-label={`${d.date}，${d.count} 次提交`}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="heat-legend">
+          少
+          {[0, 1, 2, 3, 4].map((n) => (
+            <i className={`heat-cell heat-${n}`} key={n} />
+          ))}
+          多
+        </div>
+      </Panel>
+      <div className="metrics three">
+        <Metric
+          label="最活跃的一天"
+          value={
+            ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][
+              computed.weekdays.indexOf(Math.max(...computed.weekdays))
+            ]
+          }
+          note="提交数量最多的星期"
+        />
+        <Metric
+          label="最常出现的时刻"
+          value={`${String(computed.hours.indexOf(Math.max(...computed.hours))).padStart(2, '0')}:00`}
+          note="提交记录中的当地小时"
+        />
+        <Metric
+          label="留下足迹的日子"
+          value={fmt(computed.days.filter((d) => d.count > 0).length)}
+          note="所选范围内有提交的天数"
+        />
+      </div>
+      <Panel>
+        <div className="panel-heading">
+          <div>
+            <h3>每周提交频率</h3>
+            <p>Commits by week</p>
+          </div>
+        </div>
+        <Chart labels={computed.labels} values={computed.values} type="bar" label="每周提交数" />
+      </Panel>
+    </div>
+  );
 }
-export function Contributors(){
-  const{data,set}=useAtlas();const[selected,setSelected]=useState('');if(!data)return null;const people=contributors(data.commits);const person=people.find(p=>p.name===selected);
-  return <div className="page"><SectionTitle eyebrow="THE PEOPLE BEHIND THE PROJECT" title="每一份贡献，都留下了痕迹。" description="按姓名排列，仅展示 Git 历史统计，不作能力或绩效评分。"/><div className="contributors-grid">{people.map((p,i)=><button key={`${p.name}-${i}`} className={`panel contributor-card ${selected===p.name?'active':''}`} onClick={()=>setSelected(p.name)}><div className={`avatar avatar-${i%4}`}>{p.name.slice(0,1).toUpperCase()}</div><h2>{p.name}</h2><span>{p.commits.length} 次提交 · {Math.round(p.commits.length/Math.max(1,data.commits.length)*100)}%</span><div className="contributor-meter"><i style={{width:`${p.commits.length/Math.max(1,data.commits.length)*100}%`}}/></div><div className="inline"><small className="positive">+{fmt(p.insertions)}</small><small className="negative">−{fmt(p.deletions)}</small><ArrowUpRight size={15}/></div></button>)}</div>{person&&<Panel><div className="panel-heading"><div><h3>{person.name} 的贡献详情</h3><p>{day(person.commits[0]?.date)} — {day(person.commits.at(-1)?.date)}</p></div><button className="button" onClick={()=>set({query:`author:"${person.name}"`,view:'timeline'})}>查看提交</button></div><div className="metrics three"><Metric label="提交" value={fmt(person.commits.length)}/><Metric label="涉及文件" value={fmt(person.files.size)}/><Metric label="新增 / 删除" value={`+${fmt(person.insertions)} / −${fmt(person.deletions)}`}/></div></Panel>}</div>;
+export function Contributors() {
+  const { data, set } = useAtlas();
+  const [selected, setSelected] = useState('');
+  if (!data) return null;
+  const people = contributors(data.commits);
+  const person = people.find((p) => p.name === selected);
+  return (
+    <div className="page">
+      <SectionTitle
+        eyebrow="THE PEOPLE BEHIND THE PROJECT"
+        title="每一份贡献，都留下了痕迹。"
+        description="按姓名排列，仅展示 Git 历史统计，不作能力或绩效评分。"
+      />
+      <div className="contributors-grid">
+        {people.map((p, i) => (
+          <button
+            key={`${p.name}-${i}`}
+            className={`panel contributor-card ${selected === p.name ? 'active' : ''}`}
+            onClick={() => setSelected(p.name)}
+          >
+            <div className={`avatar avatar-${i % 4}`}>{p.name.slice(0, 1).toUpperCase()}</div>
+            <h2>{p.name}</h2>
+            <span>
+              {p.commits.length} 次提交 ·{' '}
+              {Math.round((p.commits.length / Math.max(1, data.commits.length)) * 100)}%
+            </span>
+            <div className="contributor-meter">
+              <i style={{ width: `${(p.commits.length / Math.max(1, data.commits.length)) * 100}%` }} />
+            </div>
+            <div className="inline">
+              <small className="positive">+{fmt(p.insertions)}</small>
+              <small className="negative">−{fmt(p.deletions)}</small>
+              <ArrowUpRight size={15} />
+            </div>
+          </button>
+        ))}
+      </div>
+      {person && (
+        <Panel>
+          <div className="panel-heading">
+            <div>
+              <h3>{person.name} 的贡献详情</h3>
+              <p>
+                {day(person.commits[0]?.date)} — {day(person.commits.at(-1)?.date)}
+              </p>
+            </div>
+            <button
+              className="button"
+              onClick={() => set({ query: `author:"${person.name}"`, view: 'timeline' })}
+            >
+              查看提交
+            </button>
+          </div>
+          <div className="metrics three">
+            <Metric label="提交" value={fmt(person.commits.length)} />
+            <Metric label="涉及文件" value={fmt(person.files.size)} />
+            <Metric label="新增 / 删除" value={`+${fmt(person.insertions)} / −${fmt(person.deletions)}`} />
+          </div>
+        </Panel>
+      )}
+    </div>
+  );
 }
-export function Compare(){
-  const{data,set}=useAtlas();const[a,setA]=useState(data?.commits[0]?.hash??'');const[b,setB]=useState(data?.commits.at(-1)?.hash??'');const[result,setResult]=useState<ReturnType<typeof compareSnapshots>|null>(null);const[changes,setChanges]=useState<FileChange[]|null>(null);const[busy,setBusy]=useState(false);
-  if(!data?.commits.length)return null;
-  async function compare(){if(!data)return;setBusy(true);setChanges(null);setResult(compareSnapshots(data.snapshots[a],data.snapshots[b]));try{if(data.source==='local'&&window.gitAtlas){const r=await window.gitAtlas.compare(a,b);if(r.ok)setChanges(r.data);else set({error:r.error});}}finally{setBusy(false);}}
-  const options=data.commits.map(c=><option value={c.hash} key={c.hash}>{day(c.date)} · {c.shortHash} · {c.message.slice(0,50)}</option>);
-  return <div className="page"><SectionTitle eyebrow="TWO MOMENTS, ONE STORY" title="时间之间，发生了什么？" description="比较两个提交的真实文件树，发现新增、移除和修改。"/><Panel className="compare-controls"><label><span>起点 A</span><select aria-label="比较起点" value={a} onChange={e=>{setA(e.target.value);setResult(null);}}>{options}</select><strong>{fmt(data.snapshots[a]?.totalFiles??0)} <small>files</small></strong></label><ArrowUpRight size={28}/><label><span>终点 B</span><select aria-label="比较终点" value={b} onChange={e=>{setB(e.target.value);setResult(null);}}>{options}</select><strong>{fmt(data.snapshots[b]?.totalFiles??0)} <small>files</small></strong></label><MagneticButton className="primary" disabled={busy} onClick={()=>void compare()}>{busy?'比较中…':'比较快照'}</MagneticButton></Panel>{result?<><div className="metrics three"><Metric label="新增文件" value={`+${result.added.length}`}/><Metric label="移除文件" value={`−${result.removed.length}`}/><Metric label="修改文件" value={fmt(result.modified.length)}/></div>{changes&&<p className="muted">文本变化：+{fmt(changes.reduce((n,c)=>n+c.insertions,0))} / −{fmt(changes.reduce((n,c)=>n+c.deletions,0))} 行。二进制文件不计行数。文件分类按路径，重命名计入新增与移除。</p>}<div className="compare-grid">{(['added','removed','modified']as const).map((key,i)=><Panel key={key}><div className="panel-heading"><h3>{['新增','移除','修改'][i]}</h3><span className="count">{result[key].length}</span></div><div className="compare-files">{result[key].slice(0,1000).map(f=><div key={f.path}>{f.path}</div>)}{result[key].length>1000&&<p>显示前 1,000 项，可导出历史查看完整列表。</p>}{!result[key].length&&<p className="muted">没有{['新增','移除','修改'][i]}文件</p>}</div></Panel>)}</div></>:<Empty title="选定两个时刻" detail="数据来自提交快照，与工作区的未提交修改无关。"/>}</div>;
+export function Compare() {
+  const { data, set } = useAtlas();
+  const [a, setA] = useState(data?.commits[0]?.hash ?? '');
+  const [b, setB] = useState(data?.commits.at(-1)?.hash ?? '');
+  const [result, setResult] = useState<ReturnType<typeof compareSnapshots> | null>(null);
+  const [changes, setChanges] = useState<FileChange[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (!data?.commits.length) return null;
+  async function compare() {
+    if (!data) return;
+    setBusy(true);
+    setChanges(null);
+    setResult(compareSnapshots(data.snapshots[a], data.snapshots[b]));
+    try {
+      if (data.source === 'local' && window.gitAtlas) {
+        const r = await window.gitAtlas.compare(a, b);
+        if (r.ok) setChanges(r.data);
+        else set({ error: r.error });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+  const options = data.commits.map((c) => (
+    <option value={c.hash} key={c.hash}>
+      {day(c.date)} · {c.shortHash} · {c.message.slice(0, 50)}
+    </option>
+  ));
+  return (
+    <div className="page">
+      <SectionTitle
+        eyebrow="TWO MOMENTS, ONE STORY"
+        title="时间之间，发生了什么？"
+        description="比较两个提交的真实文件树，发现新增、移除和修改。"
+      />
+      <Panel className="compare-controls">
+        <label>
+          <span>起点 A</span>
+          <select
+            aria-label="比较起点"
+            value={a}
+            onChange={(e) => {
+              setA(e.target.value);
+              setResult(null);
+            }}
+          >
+            {options}
+          </select>
+          <strong>
+            {fmt(data.snapshots[a]?.totalFiles ?? 0)} <small>files</small>
+          </strong>
+        </label>
+        <ArrowUpRight size={28} />
+        <label>
+          <span>终点 B</span>
+          <select
+            aria-label="比较终点"
+            value={b}
+            onChange={(e) => {
+              setB(e.target.value);
+              setResult(null);
+            }}
+          >
+            {options}
+          </select>
+          <strong>
+            {fmt(data.snapshots[b]?.totalFiles ?? 0)} <small>files</small>
+          </strong>
+        </label>
+        <MagneticButton className="primary" disabled={busy} onClick={() => void compare()}>
+          {busy ? '比较中…' : '比较快照'}
+        </MagneticButton>
+      </Panel>
+      {result ? (
+        <>
+          <div className="metrics three">
+            <Metric label="新增文件" value={`+${result.added.length}`} />
+            <Metric label="移除文件" value={`−${result.removed.length}`} />
+            <Metric label="修改文件" value={fmt(result.modified.length)} />
+          </div>
+          {changes && (
+            <p className="muted">
+              文本变化：+{fmt(changes.reduce((n, c) => n + c.insertions, 0))} / −
+              {fmt(changes.reduce((n, c) => n + c.deletions, 0))}{' '}
+              行。二进制文件不计行数。文件分类按路径，重命名计入新增与移除。
+            </p>
+          )}
+          <div className="compare-grid">
+            {(['added', 'removed', 'modified'] as const).map((key, i) => (
+              <Panel key={key}>
+                <div className="panel-heading">
+                  <h3>{['新增', '移除', '修改'][i]}</h3>
+                  <span className="count">{result[key].length}</span>
+                </div>
+                <div className="compare-files">
+                  {result[key].slice(0, 1000).map((f) => (
+                    <div key={f.path}>{f.path}</div>
+                  ))}
+                  {result[key].length > 1000 && <p>显示前 1,000 项，可导出历史查看完整列表。</p>}
+                  {!result[key].length && <p className="muted">没有{['新增', '移除', '修改'][i]}文件</p>}
+                </div>
+              </Panel>
+            ))}
+          </div>
+        </>
+      ) : (
+        <Empty title="选定两个时刻" detail="数据来自提交快照，与工作区的未提交修改无关。" />
+      )}
+    </div>
+  );
 }

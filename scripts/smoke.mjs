@@ -1,0 +1,177 @@
+// Native Electron end-to-end test. Run after build, or against the packaged exe
+// using GITATLAS_EXECUTABLE. Dialog selection is mocked; IPC and Git are real.
+import { _electron as electron } from 'playwright';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { simpleGit } from 'simple-git';
+const temp = await mkdtemp(join(tmpdir(), 'atlas-ui-'));
+const repo = join(temp, 'Atlas 示例项目');
+await mkdir(repo);
+const git = simpleGit(repo);
+await git.init(['--initial-branch=main']);
+await git.addConfig('user.name', 'Atlas Developer');
+await git.addConfig('user.email', 'test@example.invalid');
+await git.addConfig('core.autocrlf', 'false');
+await writeFile(join(repo, 'README.md'), '# Atlas example\n');
+await git.add('.');
+await git.commit('Initial project');
+await mkdir(join(repo, 'src'));
+await writeFile(join(repo, 'src', 'app.ts'), 'export const title = "source-code-sentinel";\n');
+await git.add('.');
+await git.commit('Add application');
+await git.checkoutLocalBranch('feature');
+await writeFile(join(repo, 'src', 'feature.ts'), 'export const feature = true;\n');
+await git.add('.');
+await git.commit('Add feature');
+await git.checkout('main');
+await git.merge(['--no-ff', 'feature', '-m', 'Merge feature']);
+await writeFile(
+  join(repo, 'src', 'app.ts'),
+  'export const title = "source-code-sentinel";\nexport const version = 1;\n',
+);
+await git.add('.');
+await git.commit('Update application');
+await writeFile(join(repo, 'uncommitted.txt'), 'do not change');
+const before = await git.status();
+const head = await git.revparse(['HEAD']);
+await mkdir('docs', { recursive: true });
+await mkdir('test-results', { recursive: true });
+const errors = [];
+const app = await electron.launch({
+  ...(process.env.GITATLAS_EXECUTABLE ? { executablePath: resolve(process.env.GITATLAS_EXECUTABLE) } : {}),
+  args: [...(process.env.GITATLAS_EXECUTABLE ? [] : ['.']), `--user-data-dir=${join(temp, 'profile')}`],
+  env: { ...process.env, GITATLAS_DEV: '0' },
+  timeout: 60000,
+});
+try {
+  const page = await app.firstWindow();
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.getByRole('button', { name: '先体验一个演示仓库' }).waitFor();
+  const security = await app.evaluate(({ BrowserWindow }) => {
+    const p = BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences();
+    return { contextIsolation: p.contextIsolation, nodeIntegration: p.nodeIntegration, sandbox: p.sandbox };
+  });
+  assert.deepEqual(security, { contextIsolation: true, nodeIntegration: false, sandbox: true });
+  assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
+  const status = await page.evaluate(() => window.gitAtlas.status());
+  assert.equal(status.ok, true);
+  assert.equal(status.data.git, true);
+  await page.getByRole('button', { name: '先体验一个演示仓库' }).click();
+  await page.getByText('沿途的里程碑').waitFor();
+  await page.screenshot({ path: 'docs/overview.png', fullPage: true });
+  await page.getByRole('button', { name: '时光回溯 Time machine' }).click();
+  await page.getByText('此次变化', { exact: true }).waitFor();
+  await page.screenshot({ path: 'docs/timeline.png', fullPage: true });
+  await page.getByRole('button', { name: '第一次提交', exact: true }).click();
+  await page.getByRole('button', { name: '播放历史', exact: true }).click();
+  await page.waitForFunction(() => Number(document.querySelector('input[aria-label="提交进度"]').value) > 0);
+  await page.getByRole('button', { name: '暂停播放', exact: true }).click();
+  const paused = await page.getByRole('slider', { name: '提交进度' }).inputValue();
+  await page.getByRole('textbox', { name: '搜索提交' }).fill('author:Alice');
+  assert.ok((await page.locator('.commit-row').count()) > 0);
+  assert.ok((await page.locator('.commit-row').allTextContents()).every((t) => t.includes('Alice')));
+  await page.getByRole('textbox', { name: '搜索提交' }).press('ArrowLeft');
+  assert.equal(await page.getByRole('slider', { name: '提交进度' }).inputValue(), paused);
+  await page.getByRole('textbox', { name: '搜索提交' }).fill('');
+  await page.getByRole('button', { name: '最新提交', exact: true }).click();
+  await page.getByRole('button', { name: '生长视图 Growth' }).click();
+  await page.locator('.directory-card').first().waitFor();
+  await page.screenshot({ path: 'docs/growth-view.png', fullPage: true });
+  await page.getByRole('button', { name: '活动节奏 Activity' }).click();
+  await page.locator('.heat-cell').first().waitFor();
+  await page.getByRole('button', { name: '贡献者 Contributors' }).click();
+  await page.locator('.contributor-card').first().click();
+  await page.getByRole('button', { name: '查看提交' }).waitFor();
+  await page.getByRole('button', { name: '快照对比 Compare' }).click();
+  await page.getByRole('button', { name: '比较快照', exact: true }).click();
+  await page.getByText('新增文件', { exact: true }).waitFor();
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  await page.getByRole('button', { name: '深色', exact: true }).click();
+  await page.getByRole('button', { name: '关闭设置', exact: true }).click();
+  await page.getByRole('button', { name: '项目概览 Overview' }).click();
+  await page.getByText('沿途的里程碑').waitFor();
+  await page.screenshot({ path: 'docs/dark-mode.png', fullPage: true });
+  await app.evaluate(({ dialog }, path) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
+  }, repo);
+  await page.getByRole('button', { name: '打开另一个仓库' }).click();
+  await page.waitForFunction(
+    () => document.querySelector('.workspace-switch strong')?.textContent === 'Atlas 示例项目',
+  );
+  assert.equal(await page.getByRole('combobox', { name: '当前分支' }).inputValue(), 'main');
+  await page.getByRole('button', { name: '时光回溯 Time machine' }).click();
+  await page.getByText('此次变化', { exact: true }).waitFor();
+  await page.locator('.changes-list button').first().click();
+  await page.waitForFunction(() =>
+    document.querySelector('.diff-content')?.textContent.includes('+export const version = 1;'),
+  );
+  await page.screenshot({ path: 'docs/commit-detail.png', fullPage: true });
+  await page.getByRole('combobox', { name: '当前分支' }).selectOption('feature');
+  await page.waitForFunction(() => !document.querySelector('.loading-card'));
+  assert.equal(await git.revparse(['HEAD']), head);
+  assert.equal((await git.status()).files.length, before.files.length);
+  await page.getByRole('combobox', { name: '当前分支' }).selectOption('main');
+  await page.waitForFunction(() => !document.querySelector('.loading-card'));
+  const exported = join(temp, 'history.json');
+  await app.evaluate(({ dialog }, path) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: path });
+  }, exported);
+  await page.getByRole('button', { name: '导出历史', exact: true }).click();
+  await page.getByRole('status').filter({ hasText: '历史已导出' }).waitFor();
+  const json = await readFile(exported, 'utf8');
+  assert.ok(!json.includes('source-code-sentinel'));
+  assert.ok(!json.includes(repo));
+  assert.ok(!json.includes('test@example.invalid'));
+  assert.equal(JSON.parse(json).commits.length, 5);
+  await app.evaluate(({ dialog }, path) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
+  }, exported);
+  await page.getByRole('button', { name: '导入 JSON', exact: true }).click();
+  await page.getByText('导入历史 · 元数据模式，未包含源码或 Diff').waitFor();
+  assert.equal(await page.getByRole('combobox', { name: '当前分支' }).isDisabled(), true);
+  assert.deepEqual(errors, []);
+  await writeFile(
+    'test-results/smoke.json',
+    JSON.stringify(
+      {
+        passed: true,
+        platform: process.platform,
+        security,
+        checks: [
+          'packaged startup',
+          'preload isolation',
+          'demo navigation',
+          'play/pause',
+          'search',
+          'keyboard focus',
+          'growth',
+          'activity',
+          'contributors',
+          'compare',
+          'theme',
+          'local Git scan',
+          'real diff',
+          'read-only branches',
+          'export privacy',
+          'import',
+        ],
+        screenshots: ['overview', 'timeline', 'growth-view', 'dark-mode', 'commit-detail'],
+      },
+      null,
+      2,
+    ),
+  );
+  console.log('Native Electron smoke test passed.');
+} catch (error) {
+  const page = await app.firstWindow().catch(() => null);
+  if (page) {
+    await page.screenshot({ path: 'test-results/failure.png', fullPage: true }).catch(() => {});
+    await writeFile('test-results/failure.txt', await page.locator('body').innerText()).catch(() => {});
+  }
+  throw error;
+} finally {
+  await app.close();
+  await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 1000 });
+}
