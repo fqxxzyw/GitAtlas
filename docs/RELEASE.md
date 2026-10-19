@@ -9,7 +9,7 @@ Windows x64 首个可用版本：本地 Git 历史读取、项目时间轴播放
 - `GitAtlas-Setup-x64.exe`：安装版，可选择安装目录。
 - `GitAtlas-Portable-x64.exe`：便携版，无需安装。
 - `SHA256SUMS.txt`：安装包校验值。
-- `GitAtlas-UI-evidence.zip`：自动化测试截图及报告。
+- `GitAtlas-verification.json`：Windows 桌面自动化测试报告。
 
 读取本地仓库需要预先安装 Git for Windows，并让 `git --version` 可用。JSON 导入和演示不需要 Git。
 

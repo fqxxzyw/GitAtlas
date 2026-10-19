@@ -49,7 +49,7 @@ visionOS 启发的空间分层、Liquid Glass 风格半透明材质、弹性导�
 
 截图来自实际应用的 Windows 自动化测试。概览、时间轴、生长视图和深色主题使用明确标注的合成演示数据；Diff 截图使用测试创建的真实本地 Git 仓库。
 
-测试工作流产出 `GitAtlas-UI-evidence` 截图包，成功发布后也附在 Release。`docs/*.png` 在原生端到端测试中生成，不用设计稿冒充截图。
+原生端到端测试在运行环境生成 `docs/*.png`。公开 Release 提供 `GitAtlas-verification.json` 测试报告；截图公开发布另行确认。
 
 无需 Git 也可体验：
 
