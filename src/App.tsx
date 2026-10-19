@@ -27,6 +27,8 @@ import {
   RotateCcw,
   Trash2,
   Keyboard,
+  Github,
+  Link,
 } from 'lucide-react';
 import { useAtlas, type View, day } from './core/store';
 import { makeDemo } from './core/demo';
@@ -36,6 +38,7 @@ import { Overview } from './components/Overview';
 import { Timeline, Files } from './components/Timeline';
 import { Growth, Activity, Contributors, Compare } from './components/Insights';
 import { Player } from './components/Player';
+import { RemoteHub } from './components/RemoteHub';
 import { Empty, MagneticButton } from './components/ui';
 const navigation: { id: View; name: string; english: string; icon: typeof Gauge }[] = [
   { id: 'overview', name: '项目概览', english: 'Overview', icon: Gauge },
@@ -59,6 +62,7 @@ export default function App() {
   const { data, index, view, busy, error, progress, query, load, set } = useAtlas();
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [settings, setSettings] = useState(false);
+  const [remoteHub, setRemoteHub] = useState(false);
   const [recents, setRecents] = useState<RecentRepository[]>([]);
   const [gitStatus, setGitStatus] = useState<boolean | null>(null);
   const [toast, setToast] = useState('');
@@ -194,6 +198,7 @@ export default function App() {
       const editing =
         target instanceof HTMLElement &&
         (target.matches('input,textarea,select') || target.isContentEditable);
+      if (remoteHub) return;
       if (e.ctrlKey || e.metaKey) {
         if (e.key.toLowerCase() === 'o') {
           e.preventDefault();
@@ -229,7 +234,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [open, exportData, settings, busy]);
+  }, [open, exportData, settings, busy, remoteHub]);
   const scan = async (branch: string, limit: number) => {
     if (window.gitAtlas) await accept(window.gitAtlas.scan(branch, limit));
   };
@@ -291,6 +296,18 @@ export default function App() {
             </div>
           )}
           <div className="toolbar-space" />
+          <button
+            className="icon-button"
+            title="连接 GitHub 仓库"
+            aria-label="连接 GitHub 仓库"
+            disabled={busy}
+            onClick={() => {
+              set({ playing: false });
+              setRemoteHub(true);
+            }}
+          >
+            <Github size={19} />
+          </button>
           {data && (
             <div className="search-box">
               <Search size={16} />
@@ -368,7 +385,7 @@ export default function App() {
                   <Plus size={16} /> 打开另一个仓库
                 </button>
                 <span className="version">
-                  GITATLAS <span>v0.1.0</span>
+                  GITATLAS <span>v0.2.0</span>
                 </span>
               </div>
             </aside>
@@ -445,6 +462,11 @@ export default function App() {
                 <ArrowUpFromLine size={18} /> 导入历史 JSON
               </MagneticButton>
             </div>
+            <button className="remote-welcome-button" disabled={busy} onClick={() => setRemoteHub(true)}>
+              <Link size={17} />
+              添加仓库链接<span>或登录 GitHub</span>
+              <ArrowUpRight size={15} />
+            </button>
             <button className="demo-link" onClick={demo}>
               先体验一个演示仓库 <ArrowUpRight size={15} />
             </button>
@@ -543,6 +565,17 @@ export default function App() {
             </div>
           </div>
         )}
+        {remoteHub && (
+          <RemoteHub
+            onClose={() => setRemoteHub(false)}
+            onLoaded={(next) => {
+              load(next);
+              set({ view: 'overview', progress: null });
+              setRemoteHub(false);
+              void refreshRecents();
+            }}
+          />
+        )}
         {settings && (
           <div className="overlay" onClick={() => setSettings(false)}>
             <section
@@ -640,7 +673,7 @@ export default function App() {
                 </>
               )}
               <div className="settings-footer">
-                GitAtlas 0.1.0 · MIT
+                GitAtlas 0.2.0 · MIT
                 <br />
                 此刻：{data?.commits[index]?.shortHash ?? '尚未打开项目'}
               </div>

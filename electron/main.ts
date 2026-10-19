@@ -1,14 +1,16 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session, Menu } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session, Menu, shell } from 'electron';
 import { join } from 'node:path';
 import { readFile, writeFile, stat, mkdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { GitService } from './git-service';
+import { RemoteService, parseGitHubURL } from './remote-service';
 import { GitAtlasFailure, mapError } from './errors';
 import { exportHistory, validateHistory } from '../src/core/transfer';
 import type { RecentRepository, Result } from '../src/core/model';
 let window: BrowserWindow;
 let service: GitService;
+let remote: RemoteService;
 let recent: RecentRepository[] = [];
 const isDev = !app.isPackaged && process.env.GITATLAS_DEV === '1';
 const rendererURL = isDev
@@ -45,6 +47,42 @@ function handle<T>(name: string, fn: (...args: unknown[]) => Promise<T> | T) {
 function installHandlers() {
   const string = z.string().max(8192);
   const hash = z.string().regex(/^[a-f0-9]{40,64}$/);
+  handle('remote-status', () => remote.status());
+  handle('github-login', () => remote.login());
+  handle('github-logout', () => remote.logout());
+  handle('github-repositories', (page) => remote.repositories(z.number().int().min(1).max(20).parse(page)));
+  handle('remote-caches', () => remote.listCaches());
+  handle('remote-open', async (url) => {
+    const path = await remote.download(z.string().max(500).parse(url));
+    const data = await service.open(path, parseGitHubURL(String(url)).fullName);
+    await remember(data.repository);
+    return data;
+  });
+  handle('remote-open-cache', async (id) => {
+    const cacheId = hash.parse(id);
+    const data = await service.open(
+      await remote.cachePath(cacheId),
+      remote.listCaches().find((c) => c.id === cacheId)?.fullName,
+    );
+    await remember(data.repository);
+    return data;
+  });
+  handle('remote-remove-cache', async (id) => {
+    const cacheId = hash.parse(id);
+    const path = await remote.cachePath(cacheId);
+    if (service.path === path) throw new GitAtlasFailure('CACHE_IN_USE', 'Current repository is open');
+    await remote.removeCache(cacheId);
+    await service.clearRepositoryCache(path);
+    recent = recent.filter((r) => r.path !== path);
+    await saveRecent();
+  });
+  handle('remote-cancel', () => {
+    remote.cancel();
+    service.cancel();
+  });
+  handle('github-authorize', async () => {
+    await shell.openExternal('https://github.com/login/device');
+  });
   handle('status', () => GitService.status());
   handle('recent', () => recent);
   handle('open', async () => {
@@ -61,7 +99,7 @@ function installHandlers() {
     const path = string.parse(value);
     if (!recent.some((r) => r.path === path))
       throw new GitAtlasFailure('REPOSITORY_NOT_FOUND', 'Unknown recent path');
-    const data = await service.open(path);
+    const data = await service.open(path, recent.find((r) => r.path === path)?.name);
     await remember(data.repository);
     return data;
   });
@@ -176,12 +214,17 @@ app.whenReady().then(async () => {
   service = new GitService(join(app.getPath('userData'), 'cache'), (progress) => {
     if (window && !window.isDestroyed()) window.webContents.send('atlas:progress', progress);
   });
+  remote = new RemoteService(join(app.getPath('userData'), 'remote'), (progress) => {
+    if (window && !window.isDestroyed()) window.webContents.send('atlas:remote-progress', progress);
+  });
+  await remote.initialize();
   installHandlers();
   await createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();
   });
 });
+app.on('before-quit', () => remote?.cancel());
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });

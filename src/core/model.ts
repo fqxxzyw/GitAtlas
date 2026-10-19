@@ -59,6 +59,17 @@ export interface ScanProgress {
   total: number;
 }
 export interface DesktopAPI {
+  remoteStatus(): Promise<Result<{ available: boolean; account: GitHubAccount | null }>>;
+  githubLogin(): Promise<Result<GitHubAccount>>;
+  githubLogout(): Promise<Result<void>>;
+  githubRepositories(page: number): Promise<Result<{ repositories: GitHubRepository[]; hasMore: boolean }>>;
+  remoteOpen(url: string): Promise<Result<HistoryData>>;
+  remoteCaches(): Promise<Result<RemoteCache[]>>;
+  remoteOpenCache(id: string): Promise<Result<HistoryData>>;
+  remoteRemoveCache(id: string): Promise<Result<void>>;
+  remoteCancel(): Promise<Result<void>>;
+  openGitHubAuthorization(): Promise<Result<void>>;
+  onRemoteProgress(callback: (progress: RemoteProgress) => void): () => void;
   status(): Promise<Result<{ git: boolean; version: string; platform: string }>>;
   openRepository(): Promise<Result<HistoryData | null>>;
   recent(): Promise<Result<RecentRepository[]>>;
@@ -77,4 +88,26 @@ declare global {
   interface Window {
     gitAtlas?: DesktopAPI;
   }
+}
+
+export interface GitHubAccount {
+  login: string;
+  name: string;
+}
+export interface GitHubRepository {
+  fullName: string;
+  description: string;
+  private: boolean;
+  updatedAt: string;
+}
+export interface RemoteCache {
+  id: string;
+  fullName: string;
+  updatedAt: string;
+}
+export interface RemoteProgress {
+  kind: 'login' | 'download';
+  stage: string;
+  percent?: number;
+  deviceCode?: string;
 }

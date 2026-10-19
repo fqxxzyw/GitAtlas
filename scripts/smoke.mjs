@@ -134,6 +134,41 @@ try {
   await page.getByRole('button', { name: '导入 JSON', exact: true }).click();
   await page.getByText('导入历史 · 元数据模式，未包含源码或 Diff').waitFor();
   assert.equal(await page.getByRole('combobox', { name: '当前分支' }).isDisabled(), true);
+  // Real public GitHub download, with no stored user credentials or auth prompts.
+  await page.getByRole('button', { name: '连接 GitHub 仓库', exact: true }).click();
+  await page.getByRole('tab', { name: 'GitHub 账户' }).click();
+  await page.getByRole('button', { name: '登录 GitHub', exact: true }).waitFor();
+  await page.getByRole('tab', { name: '仓库链接' }).click();
+  await page.getByLabel('GitHub 仓库链接', { exact: true }).fill('https://example.com/a/b');
+  await page.getByRole('button', { name: '下载并打开', exact: true }).click();
+  await page.locator('.remote-error').filter({ hasText: '请输入 https://github.com/' }).waitFor();
+  await page.getByLabel('GitHub 仓库链接', { exact: true }).fill('https://github.com/fqxxzyw/GitAtlas');
+  await page.getByRole('button', { name: '下载并打开', exact: true }).click();
+  await page.waitForFunction(
+    () => document.querySelector('.workspace-switch strong')?.textContent === 'fqxxzyw/GitAtlas',
+    undefined,
+    { timeout: 180000 },
+  );
+  const remoteCaches = await page.evaluate(() => window.gitAtlas.remoteCaches());
+  assert.equal(remoteCaches.ok, true);
+  assert.equal(remoteCaches.data.length, 1);
+  await page.getByRole('button', { name: '连接 GitHub 仓库', exact: true }).click();
+  await page.getByRole('tab', { name: '本地缓存' }).click();
+  await page.getByRole('button', { name: '离线打开', exact: true }).click();
+  await page.getByRole('dialog', { name: '连接 GitHub 仓库' }).waitFor({ state: 'hidden' });
+  await app.evaluate(({ dialog }, path) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
+  }, repo);
+  await page.getByRole('button', { name: '打开另一个仓库' }).click();
+  await page.waitForFunction(
+    () => document.querySelector('.workspace-switch strong')?.textContent === 'Atlas 示例项目',
+  );
+  await page.getByRole('button', { name: '连接 GitHub 仓库', exact: true }).click();
+  await page.getByRole('tab', { name: '本地缓存' }).click();
+  await page.getByRole('button', { name: '删除缓存 fqxxzyw/GitAtlas', exact: true }).click();
+  await page.getByRole('button', { name: '确认删除', exact: true }).click();
+  await page.getByText('还没有下载过仓库。', { exact: true }).waitFor();
+  await page.getByRole('button', { name: '关闭仓库连接', exact: true }).click();
   assert.deepEqual(errors, []);
   await writeFile(
     'test-results/smoke.json',
@@ -159,6 +194,11 @@ try {
           'read-only branches',
           'export privacy',
           'import',
+          'remote URL validation',
+          'real public GitHub clone',
+          'offline remote cache',
+          'remote cache deletion',
+          'GitHub login entry',
         ],
         screenshots: ['overview', 'timeline', 'growth-view', 'dark-mode', 'commit-detail'],
       },

@@ -1,6 +1,6 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { stat, realpath, mkdir, readFile, writeFile, rename } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { stat, realpath, mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
+import { basename, join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { FileChange, GitCommit, HistoryData, ScanProgress } from '../src/core/model';
 import { validateHistory } from '../src/core/transfer';
@@ -19,6 +19,7 @@ export const READ_ONLY_COMMANDS = new Set([
 export class GitService {
   private git?: SimpleGit;
   private root = '';
+  private repositoryLabel = '';
   private data?: HistoryData;
   private busy = false;
   private cancelled = false;
@@ -53,7 +54,7 @@ export class GitService {
       ...args,
     ]);
   }
-  async open(directory: string) {
+  async open(directory: string, label?: string) {
     if (this.busy) throw new GitAtlasFailure('BUSY', 'Scan in progress');
     const status = await GitService.status();
     if (!status.git) throw new GitAtlasFailure('GIT_NOT_FOUND', 'Git not installed');
@@ -98,8 +99,9 @@ export class GitService {
     } catch (error) {
       throw new GitAtlasFailure('INVALID_REPOSITORY', String(error));
     }
-    const previous = { root: this.root, git: this.git, data: this.data };
+    const previous = { root: this.root, git: this.git, data: this.data, label: this.repositoryLabel };
     this.root = await realpath(root);
+    this.repositoryLabel = label ?? basename(this.root);
     this.git = git;
     this.data = undefined;
     let branch = 'HEAD';
@@ -112,10 +114,17 @@ export class GitService {
       return await this.scan(branch, 500);
     } catch (error) {
       this.root = previous.root;
+      this.repositoryLabel = previous.label;
       this.git = previous.git;
       this.data = previous.data;
       throw error;
     }
+  }
+  async clearRepositoryCache(path: string) {
+    await rm(join(this.cacheDirectory, createHash('sha256').update(path).digest('hex')), {
+      recursive: true,
+      force: true,
+    });
   }
   cancel() {
     this.cancelled = true;
@@ -155,7 +164,7 @@ export class GitService {
       const shallow = (await this.run('rev-parse', '--is-shallow-repository')).trim() === 'true';
       const empty: HistoryData = {
         version: 1,
-        repository: basename(this.root),
+        repository: this.repositoryLabel,
         branch,
         branches: labels.includes(branch) ? labels : [branch, ...labels],
         totalCommits: 0,
@@ -171,9 +180,8 @@ export class GitService {
       }
       const cacheFile = join(
         this.cacheDirectory,
-        createHash('sha256')
-          .update(this.root + '\0' + branch)
-          .digest('hex') + '.json',
+        createHash('sha256').update(this.root).digest('hex'),
+        createHash('sha256').update(branch).digest('hex') + '.json',
       );
       let cached: HistoryData | undefined;
       try {
@@ -245,7 +253,7 @@ export class GitService {
       };
       this.data = data;
       try {
-        await mkdir(this.cacheDirectory, { recursive: true });
+        await mkdir(dirname(cacheFile), { recursive: true });
         await writeFile(cacheFile + '.tmp', JSON.stringify(data));
         await rename(cacheFile + '.tmp', cacheFile);
       } catch {

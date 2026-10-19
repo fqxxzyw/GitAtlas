@@ -1,7 +1,7 @@
 {
   "name": "git-atlas",
   "productName": "GitAtlas",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A local-first Git history time machine with a spatial Windows desktop experience.",
   "author": "fqxxzyw",
   "license": "MIT",

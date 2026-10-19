@@ -14,6 +14,29 @@ export function mapError(error: unknown): AtlasError {
     code = 'GIT_NOT_FOUND';
   if (/EACCES|EPERM|permission denied/i.test(message)) code = 'PERMISSION';
   const labels: Record<string, [string, string]> = {
+    INVALID_URL: [
+      '仓库链接无效',
+      '请输入 https://github.com/所有者/仓库名，可带 .git。暂不支持 SSH、GitLab 或文件页面链接。',
+    ],
+    REMOTE_FAILED: [
+      '无法下载仓库',
+      '请检查网络与仓库链接。私有仓库需要登录且具有访问权限；组织仓库可能需要管理员授权。',
+    ],
+    REMOTE_TIMEOUT: ['连接超时', '网络请求或授权等待超时，请检查连接并重试。'],
+    NETWORK: ['GitHub 连接失败', '请检查网络后重试。已下载仓库可从本地缓存离线打开。'],
+    API_LIMIT: ['GitHub 暂时拒绝请求', '可能达到请求限额，或组织尚未授权访问。请稍后重试并检查组织授权。'],
+    AUTH_REQUIRED: ['需要重新登录', 'GitHub 授权不可用或已过期，请退出后重新登录。'],
+    AUTH_FAILED: [
+      '登录未完成',
+      '授权可能被拒绝、取消或已过期。请重试，并安装当前版本的 Git for Windows 与 Git Credential Manager。',
+    ],
+    GCM_MISSING: [
+      '缺少 Git Credential Manager',
+      '请安装 Git for Windows，并勾选 Git Credential Manager。公开链接仍可不登录读取。',
+    ],
+    CACHE_MISSING: ['缓存不可用', '缓存目录可能已移动或删除，请通过仓库链接重新下载。'],
+    CACHE_IN_USE: ['当前仓库正在使用', '请先打开另一个本地仓库，再删除此缓存。'],
+    CACHE_LIMIT: ['缓存已达上限', '最多保存 100 个远程仓库，请先删除不再需要的缓存。'],
     GIT_NOT_FOUND: [
       '未找到 Git',
       '请安装 Git for Windows，并重新打开 GitAtlas。你仍然可以导入历史 JSON 或体验演示。',
