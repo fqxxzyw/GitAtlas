@@ -64,10 +64,17 @@ export class GitService {
     } catch {
       throw new GitAtlasFailure('REPOSITORY_NOT_FOUND', 'Path does not exist');
     }
-    const git = simpleGit({ baseDir: canonical, maxConcurrentProcesses: 4, timeout: { block: 60000 } }).env({
+    const git = simpleGit({
+      baseDir: canonical,
+      maxConcurrentProcesses: 4,
+      timeout: { block: 60000 },
+      // Fixed values only: prevent locks/prompts and treat approved paths literally.
+      allowEnvironment: ['GIT_OPTIONAL_LOCKS', 'GIT_TERMINAL_PROMPT', 'GIT_LITERAL_PATHSPECS'],
+    }).env({
       ...Object.fromEntries(
         Object.entries(process.env).filter(
           ([key]) =>
+            !key.toUpperCase().startsWith('GIT_') &&
             ![
               'GIT_PAGER',
               'PAGER',
@@ -78,7 +85,7 @@ export class GitService {
               'GIT_SSH_COMMAND',
               'GIT_SSH',
               'GIT_EXTERNAL_DIFF',
-            ].includes(key),
+            ].includes(key.toUpperCase()),
         ),
       ),
       GIT_OPTIONAL_LOCKS: '0',
