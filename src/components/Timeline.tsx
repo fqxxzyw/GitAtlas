@@ -451,16 +451,7 @@ export function Files() {
                 <span>创建于 {day(history.created)}</span>
                 <span>最后修改 {day(history.lastModified)}</span>
                 <span>
-                  {history.events.length} 次变更 · +
-                  {history.events.reduce(
-                    (n, c) => n + (c.changes.find((f) => f.path === path)?.insertions ?? 0),
-                    0,
-                  )}{' '}
-                  / −
-                  {history.events.reduce(
-                    (n, c) => n + (c.changes.find((f) => f.path === path)?.deletions ?? 0),
-                    0,
-                  )}
+                  {history.events.length} 次变更 · +{history.insertions} / −{history.deletions}
                 </span>
                 {history.partial && <small>创建事件不在已加载的第一父历史中。</small>}
               </div>

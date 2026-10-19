@@ -113,7 +113,8 @@ export function Activity() {
     const dates = Object.keys(daily).sort();
     const end = new Date(dates.at(-1)! + 'T00:00:00Z');
     const first = new Date(dates[0] + 'T00:00:00Z');
-    const start = new Date(period ? Math.max(+first, +end - (period - 1) * 86400000) : +first);
+    const boundedFirst = Math.max(+first, +end - 36524 * 86400000);
+    const start = new Date(period ? Math.max(boundedFirst, +end - (period - 1) * 86400000) : boundedFirst);
     start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
     const days = [];
     for (let t = +start; t <= +end; t += 86400000) {
@@ -236,7 +237,7 @@ export function Contributors() {
   const [selected, setSelected] = useState('');
   if (!data) return null;
   const people = contributors(data.commits);
-  const person = people.find((p) => p.name === selected);
+  const person = people.find((p) => p.id === selected);
   return (
     <div className="page">
       <SectionTitle
@@ -247,9 +248,9 @@ export function Contributors() {
       <div className="contributors-grid">
         {people.map((p, i) => (
           <button
-            key={`${p.name}-${i}`}
-            className={`panel contributor-card ${selected === p.name ? 'active' : ''}`}
-            onClick={() => setSelected(p.name)}
+            key={p.id}
+            className={`panel contributor-card ${selected === p.id ? 'active' : ''}`}
+            onClick={() => setSelected(p.id)}
           >
             <div className={`avatar avatar-${i % 4}`}>{p.name.slice(0, 1).toUpperCase()}</div>
             <h2>{p.name}</h2>

@@ -66,6 +66,41 @@ export default function App() {
   const importer = useRef<HTMLInputElement>(null);
   const notify = useCallback((text: string) => setToast(text), []);
   useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [view]);
+  useEffect(() => {
+    if (!settings) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = document.querySelector<HTMLElement>('.settings-panel');
+    const focusable = () =>
+      Array.from(
+        dialog?.querySelectorAll<HTMLElement>('button:not(:disabled),input,select,[tabindex="0"]') ?? [],
+      );
+    focusable()[0]?.focus();
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setSettings(false);
+      }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      const first = items[0],
+        last = items.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener('keydown', keyboard);
+    return () => {
+      document.removeEventListener('keydown', keyboard);
+      previous?.focus();
+    };
+  }, [settings]);
+  useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(''), 4000);
     return () => clearTimeout(timer);
@@ -186,12 +221,10 @@ export default function App() {
       } else if (e.key === 'Home') state.seek(0);
       else if (e.key === 'End') state.seek(state.data.commits.length - 1);
       else if (e.key.toLowerCase() === 'f') {
-        document
-          .getElementById('commit-list')
-          ?.scrollTo({
-            top: 0,
-            behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
-          });
+        document.getElementById('commit-list')?.scrollTo({
+          top: 0,
+          behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+        });
       }
     };
     window.addEventListener('keydown', handler);

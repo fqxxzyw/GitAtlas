@@ -91,6 +91,7 @@ export class GitService {
     } catch (error) {
       throw new GitAtlasFailure('INVALID_REPOSITORY', String(error));
     }
+    const previous = { root: this.root, git: this.git, data: this.data };
     this.root = await realpath(root);
     this.git = git;
     this.data = undefined;
@@ -100,7 +101,14 @@ export class GitService {
     } catch {
       /* Unborn repository. */
     }
-    return this.scan(branch, 500);
+    try {
+      return await this.scan(branch, 500);
+    } catch (error) {
+      this.root = previous.root;
+      this.git = previous.git;
+      this.data = previous.data;
+      throw error;
+    }
   }
   cancel() {
     this.cancelled = true;
@@ -142,7 +150,7 @@ export class GitService {
         version: 1,
         repository: basename(this.root),
         branch,
-        branches: labels.length ? labels : [branch],
+        branches: labels.includes(branch) ? labels : [branch, ...labels],
         totalCommits: 0,
         commits: [],
         snapshots: {},

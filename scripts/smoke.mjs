@@ -47,6 +47,7 @@ const app = await electron.launch({
 });
 try {
   const page = await app.firstWindow();
+  await page.setViewportSize({ width: 1500, height: 980 });
   page.on('pageerror', (e) => errors.push(e.message));
   await page.getByRole('button', { name: '先体验一个演示仓库' }).waitFor();
   const security = await app.evaluate(({ BrowserWindow }) => {
@@ -60,10 +61,10 @@ try {
   assert.equal(status.data.git, true);
   await page.getByRole('button', { name: '先体验一个演示仓库' }).click();
   await page.getByText('沿途的里程碑').waitFor();
-  await page.screenshot({ path: 'docs/overview.png', fullPage: true });
-  await page.getByRole('button', { name: '时光回溯 Time machine' }).click();
+  await page.screenshot({ path: 'docs/overview.png', fullPage: false });
+  await page.getByRole('button', { name: /时光回溯/ }).click();
   await page.getByText('此次变化', { exact: true }).waitFor();
-  await page.screenshot({ path: 'docs/timeline.png', fullPage: true });
+  await page.screenshot({ path: 'docs/timeline.png', fullPage: false });
   await page.getByRole('button', { name: '第一次提交', exact: true }).click();
   await page.getByRole('button', { name: '播放历史', exact: true }).click();
   await page.waitForFunction(() => Number(document.querySelector('input[aria-label="提交进度"]').value) > 0);
@@ -76,38 +77,40 @@ try {
   assert.equal(await page.getByRole('slider', { name: '提交进度' }).inputValue(), paused);
   await page.getByRole('textbox', { name: '搜索提交' }).fill('');
   await page.getByRole('button', { name: '最新提交', exact: true }).click();
-  await page.getByRole('button', { name: '生长视图 Growth' }).click();
+  await page.getByRole('button', { name: /生长视图/ }).click();
   await page.locator('.directory-card').first().waitFor();
-  await page.screenshot({ path: 'docs/growth-view.png', fullPage: true });
-  await page.getByRole('button', { name: '活动节奏 Activity' }).click();
+  await page.screenshot({ path: 'docs/growth-view.png', fullPage: false });
+  await page.getByRole('button', { name: /活动节奏/ }).click();
   await page.locator('.heat-cell').first().waitFor();
-  await page.getByRole('button', { name: '贡献者 Contributors' }).click();
+  await page.getByRole('button', { name: /贡献者/ }).click();
   await page.locator('.contributor-card').first().click();
   await page.getByRole('button', { name: '查看提交' }).waitFor();
-  await page.getByRole('button', { name: '快照对比 Compare' }).click();
+  await page.getByRole('button', { name: /快照对比/ }).click();
   await page.getByRole('button', { name: '比较快照', exact: true }).click();
   await page.getByText('新增文件', { exact: true }).waitFor();
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('button', { name: '深色', exact: true }).click();
   await page.getByRole('button', { name: '关闭设置', exact: true }).click();
-  await page.getByRole('button', { name: '项目概览 Overview' }).click();
+  await page.getByRole('button', { name: /项目概览/ }).click();
   await page.getByText('沿途的里程碑').waitFor();
-  await page.screenshot({ path: 'docs/dark-mode.png', fullPage: true });
+  await page.screenshot({ path: 'docs/dark-mode.png', fullPage: false });
   await app.evaluate(({ dialog }, path) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
   }, repo);
+  await page.setViewportSize({ width: 1000, height: 700 });
   await page.getByRole('button', { name: '打开另一个仓库' }).click();
+  await page.setViewportSize({ width: 1500, height: 980 });
   await page.waitForFunction(
     () => document.querySelector('.workspace-switch strong')?.textContent === 'Atlas 示例项目',
   );
   assert.equal(await page.getByRole('combobox', { name: '当前分支' }).inputValue(), 'main');
-  await page.getByRole('button', { name: '时光回溯 Time machine' }).click();
+  await page.getByRole('button', { name: /时光回溯/ }).click();
   await page.getByText('此次变化', { exact: true }).waitFor();
   await page.locator('.changes-list button').first().click();
   await page.waitForFunction(() =>
     document.querySelector('.diff-content')?.textContent.includes('+export const version = 1;'),
   );
-  await page.screenshot({ path: 'docs/commit-detail.png', fullPage: true });
+  await page.screenshot({ path: 'docs/commit-detail.png', fullPage: false });
   await page.getByRole('combobox', { name: '当前分支' }).selectOption('feature');
   await page.waitForFunction(() => !document.querySelector('.loading-card'));
   assert.equal(await git.revparse(['HEAD']), head);
@@ -167,7 +170,7 @@ try {
 } catch (error) {
   const page = await app.firstWindow().catch(() => null);
   if (page) {
-    await page.screenshot({ path: 'test-results/failure.png', fullPage: true }).catch(() => {});
+    await page.screenshot({ path: 'test-results/failure.png', fullPage: false }).catch(() => {});
     await writeFile('test-results/failure.txt', await page.locator('body').innerText()).catch(() => {});
   }
   throw error;

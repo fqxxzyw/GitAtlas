@@ -82,7 +82,9 @@ export function contributors(commits: GitCommit[]) {
     c.changes.forEach((f) => g.files.add(f.path));
     groups.set(key, g);
   }
-  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return [...groups.entries()]
+    .map(([id, value]) => ({ id, ...value }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 export function milestones(data: HistoryData) {
   const result: { title: string; commit: GitCommit }[] = [];
@@ -107,6 +109,7 @@ export function milestones(data: HistoryData) {
 export function fileHistory(data: HistoryData, path: string, index = data.commits.length - 1) {
   const byHash = new Map(data.commits.map((c) => [c.hash, c]));
   const events: GitCommit[] = [];
+  const changes: FileChange[] = [];
   let name = path;
   let current: GitCommit | undefined = data.commits[index];
   let created: string | undefined;
@@ -115,6 +118,7 @@ export function fileHistory(data: HistoryData, path: string, index = data.commit
     const change = current.changes.find((f) => f.path === name);
     if (change) {
       events.push(current);
+      changes.push(change);
       if (change.type === 'added') {
         created = current.date;
         break;
@@ -123,7 +127,14 @@ export function fileHistory(data: HistoryData, path: string, index = data.commit
     }
     current = byHash.get(current.parents[0]);
   }
-  return { events: events.reverse(), created, lastModified: events.at(-1)?.date, partial: !created };
+  return {
+    events: events.reverse(),
+    created,
+    lastModified: events.at(-1)?.date,
+    partial: !created,
+    insertions: changes.reduce((n, c) => n + c.insertions, 0),
+    deletions: changes.reduce((n, c) => n + c.deletions, 0),
+  };
 }
 export function dailyActivity(commits: GitCommit[]) {
   const days: Record<string, number> = {};

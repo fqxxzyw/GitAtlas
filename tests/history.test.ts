@@ -121,6 +121,7 @@ describe('history domain', () => {
       { path: 'new.md', oldPath: 'README.md', type: 'renamed', insertions: 0, deletions: 0 },
     ];
     expect(fileHistory(d, 'new.md', 1).created).toBe(d.commits[0].date);
+    expect(fileHistory(d, 'new.md', 1).insertions).toBe(d.commits[0].changes[0].insertions);
   });
   it('groups contributions and dates without treating them as hours worked', () => {
     const d = makeDemo();

@@ -112,7 +112,8 @@ export function Overview() {
           >
             <GitCommitHorizontal size={18} />
             <span>
-              FIRST COMMIT<strong>{data.commits[0].message}</strong>
+              {data.commits.length === data.totalCommits && !data.shallow ? 'FIRST COMMIT' : 'FIRST LOADED'}
+              <strong>{data.commits[0].message}</strong>
             </span>
             <code>{data.commits[0].shortHash}</code>
           </motion.div>
