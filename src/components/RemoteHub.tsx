@@ -49,13 +49,17 @@ export function RemoteHub({
   const panel = useRef<HTMLElement>(null);
   const statusPanel = useRef<HTMLDivElement>(null);
   const mounted = useRef(true);
+  const wasBusy = useRef(false);
   const reducedMotion = useReducedMotion();
   const api = window.gitAtlas;
   useEffect(() => {
     if (busy) {
       statusPanel.current?.scrollIntoView({ block: 'nearest' });
       statusPanel.current?.querySelector<HTMLButtonElement>('[data-cancel]')?.focus();
+    } else if (wasBusy.current && !panel.current?.contains(document.activeElement)) {
+      panel.current?.focus();
     }
+    wasBusy.current = busy;
   }, [busy, progress?.deviceCode]);
   const unwrap = <T,>(result: Result<T>): T => {
     if (!result.ok) throw new Error(result.error.message);
@@ -129,7 +133,12 @@ export function RemoteHub({
       );
       const first = items[0],
         last = items.at(-1);
-      if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) {
+      if (
+        event.shiftKey &&
+        (document.activeElement === first ||
+          document.activeElement === panel.current ||
+          !panel.current?.contains(document.activeElement))
+      ) {
         event.preventDefault();
         last?.focus();
       } else if (

@@ -145,6 +145,9 @@ try {
   assert.equal(await page.getByRole('tab', { name: 'GitHub 账户' }).getAttribute('aria-selected'), 'true');
   await page.getByRole('tab', { name: 'GitHub 账户' }).press('End');
   assert.equal(await page.getByRole('tab', { name: '本地缓存' }).getAttribute('aria-selected'), 'true');
+  await page.getByRole('tab', { name: '本地缓存' }).press('Home');
+  assert.equal(await linkTab.getAttribute('aria-selected'), 'true');
+  await linkTab.press('End');
   await page.getByRole('button', { name: '刷新本地缓存' }).focus();
   await page.keyboard.press('Tab');
   assert.equal(
@@ -264,6 +267,8 @@ try {
   assert.ok(cancelBounds && cancelBounds.y >= 0 && cancelBounds.y + cancelBounds.height <= 700);
   await cancel.click();
   await page.getByRole('alert').filter({ hasText: '授权已取消' }).waitFor();
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await hub.evaluate((el) => el.contains(document.activeElement)), true);
   await app.evaluate(({ ipcMain }) => {
     ipcMain.removeHandler('atlas:github-login');
     ipcMain.handle('atlas:github-login', () => ({
