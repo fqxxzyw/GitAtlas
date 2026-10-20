@@ -2478,8 +2478,9 @@ input[type='checkbox'] {
   flex-direction: column;
   overflow: hidden;
   outline: none;
-  box-shadow: 0 30px 120px #0e203f40;
-  background: var(--bg);
+  box-shadow: 0 30px 120px #0e203f40, var(--shadow);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(32px) saturate(125%);
 }
 .remote-heading {
   display: flex;

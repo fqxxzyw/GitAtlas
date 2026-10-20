@@ -136,6 +136,38 @@ try {
   assert.equal(await page.getByRole('combobox', { name: '当前分支' }).isDisabled(), true);
   // Real public GitHub download, with no stored user credentials or auth prompts.
   await page.getByRole('button', { name: '连接 GitHub 仓库', exact: true }).click();
+  // Check keyboard navigation, focus containment and minimum-window layout.
+  await page.setViewportSize({ width: 1000, height: 700 });
+  const hub = page.getByRole('dialog', { name: '连接 GitHub 仓库' });
+  const linkTab = page.getByRole('tab', { name: '仓库链接' });
+  await linkTab.focus();
+  await linkTab.press('ArrowRight');
+  assert.equal(await page.getByRole('tab', { name: 'GitHub 账户' }).getAttribute('aria-selected'), 'true');
+  await page.getByRole('tab', { name: 'GitHub 账户' }).press('End');
+  assert.equal(await page.getByRole('tab', { name: '本地缓存' }).getAttribute('aria-selected'), 'true');
+  await page.getByRole('button', { name: '刷新本地缓存' }).focus();
+  await page.keyboard.press('Tab');
+  assert.equal(
+    await page.getByRole('button', { name: '关闭仓库连接' }).evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(
+    await page.getByRole('button', { name: '刷新本地缓存' }).evaluate((el) => el === document.activeElement),
+    true,
+  );
+  assert.equal(await hub.evaluate((el) => el.scrollWidth <= el.clientWidth), true);
+  await page.keyboard.press('Escape');
+  await hub.waitFor({ state: 'hidden' });
+  assert.equal(
+    await page
+      .getByRole('button', { name: '连接 GitHub 仓库', exact: true })
+      .evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.getByRole('button', { name: '连接 GitHub 仓库', exact: true }).click();
+  assert.equal(await hub.evaluate((el) => getComputedStyle(el).transform), 'none');
   await page.getByRole('tab', { name: 'GitHub 账户' }).click();
   await page.getByRole('button', { name: '登录 GitHub', exact: true }).waitFor();
   await page.getByRole('tab', { name: '仓库链接' }).click();
@@ -149,9 +181,21 @@ try {
     undefined,
     { timeout: 180000 },
   );
+  await page.setViewportSize({ width: 1500, height: 980 });
   const remoteCaches = await page.evaluate(() => window.gitAtlas.remoteCaches());
   assert.equal(remoteCaches.ok, true);
   assert.equal(remoteCaches.data.length, 1);
+  const activeCache = remoteCaches.data[0].id;
+  const protectedCache = await page.evaluate((id) => window.gitAtlas.remoteRemoveCache(id), activeCache);
+  assert.equal(protectedCache.ok, false);
+  assert.equal(protectedCache.error.code, 'CACHE_IN_USE');
+  await page.getByRole('button', { name: '连接 GitHub 仓库', exact: true }).click();
+  await page.getByRole('tab', { name: '本地缓存' }).click();
+  await page.getByRole('button', { name: '更新 fqxxzyw/GitAtlas', exact: true }).click();
+  await hub.waitFor({ state: 'hidden', timeout: 180000 });
+  const refreshed = await page.evaluate(() => window.gitAtlas.remoteCaches());
+  assert.equal(refreshed.ok, true);
+  assert.ok(refreshed.data[0].updatedAt >= remoteCaches.data[0].updatedAt);
   await page.getByRole('button', { name: '连接 GitHub 仓库', exact: true }).click();
   await page.getByRole('tab', { name: '本地缓存' }).click();
   await page.getByRole('button', { name: '离线打开', exact: true }).click();
@@ -169,6 +213,92 @@ try {
   await page.getByRole('button', { name: '确认删除', exact: true }).click();
   await page.getByText('还没有下载过仓库。', { exact: true }).waitFor();
   await page.getByRole('button', { name: '关闭仓库连接', exact: true }).click();
+  // UI-only protocol doubles: no actual account, credential, or private repository.
+  await app.evaluate(({ ipcMain }) => {
+    ipcMain.removeHandler('atlas:remote-status');
+    ipcMain.handle('atlas:remote-status', () => ({ ok: true, data: { available: false, account: null } }));
+  });
+  await page.getByRole('button', { name: '连接 GitHub 仓库', exact: true }).click();
+  await page.getByRole('tab', { name: 'GitHub 账户' }).click();
+  await page
+    .getByText('请安装 Git for Windows，并勾选 Git Credential Manager。安装后重启 GitAtlas。', {
+      exact: true,
+    })
+    .waitFor();
+  assert.equal(await page.getByRole('button', { name: '登录 GitHub', exact: true }).isDisabled(), true);
+  await page.getByRole('button', { name: '关闭仓库连接' }).click();
+  await app.evaluate(({ ipcMain, BrowserWindow }) => {
+    let cancelLogin;
+    ipcMain.removeHandler('atlas:remote-status');
+    ipcMain.handle('atlas:remote-status', () => ({ ok: true, data: { available: true, account: null } }));
+    ipcMain.removeHandler('atlas:github-login');
+    ipcMain.handle(
+      'atlas:github-login',
+      () =>
+        new Promise((resolve) => {
+          cancelLogin = () =>
+            resolve({ ok: false, error: { code: 'CANCELLED', message: '授权已取消（界面测试）' } });
+          BrowserWindow.getAllWindows()[0].webContents.send('atlas:remote-progress', {
+            kind: 'login',
+            stage: '输入验证码',
+            deviceCode: 'TEST-CODE',
+          });
+        }),
+    );
+    ipcMain.removeHandler('atlas:remote-cancel');
+    ipcMain.handle('atlas:remote-cancel', () => {
+      cancelLogin?.();
+      return { ok: true };
+    });
+  });
+  await page.setViewportSize({ width: 1000, height: 700 });
+  await page.getByRole('button', { name: '连接 GitHub 仓库', exact: true }).click();
+  await page.getByRole('tab', { name: 'GitHub 账户' }).click();
+  await page.getByRole('button', { name: '登录 GitHub', exact: true }).click();
+  await page.getByText('TEST-CODE', { exact: true }).waitFor();
+  const cancel = page.getByRole('button', { name: '取消当前操作' });
+  await page.waitForFunction(() => document.activeElement?.hasAttribute('data-cancel'));
+  await page.keyboard.press('Escape');
+  assert.equal(await hub.isVisible(), true);
+  const cancelBounds = await cancel.boundingBox();
+  assert.ok(cancelBounds && cancelBounds.y >= 0 && cancelBounds.y + cancelBounds.height <= 700);
+  await cancel.click();
+  await page.getByRole('alert').filter({ hasText: '授权已取消' }).waitFor();
+  await app.evaluate(({ ipcMain }) => {
+    ipcMain.removeHandler('atlas:github-login');
+    ipcMain.handle('atlas:github-login', () => ({
+      ok: true,
+      data: { login: 'atlas-test', name: '测试账户（模拟）' },
+    }));
+    ipcMain.removeHandler('atlas:github-repositories');
+    ipcMain.handle('atlas:github-repositories', (_event, page) => ({
+      ok: true,
+      data: {
+        repositories: Array.from({ length: page === 1 ? 100 : 5 }, (_, i) => ({
+          fullName: `atlas-test/project-${(page - 1) * 100 + i}`,
+          description: '界面测试数据',
+          private: true,
+          updatedAt: '',
+        })),
+        hasMore: page === 1,
+      },
+    }));
+    ipcMain.removeHandler('atlas:github-logout');
+    ipcMain.handle('atlas:github-logout', () => ({ ok: true }));
+  });
+  await page.getByRole('button', { name: '登录 GitHub', exact: true }).click();
+  await page.locator('.remote-repo').first().waitFor();
+  assert.equal(await page.locator('.remote-repo').count(), 100);
+  assert.equal(await page.locator('.remote-repo [aria-label="私有仓库"]').count(), 100);
+  await page.getByRole('button', { name: '加载更多仓库' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.remote-repo').length === 105);
+  await page.getByRole('textbox', { name: '筛选 GitHub 仓库' }).fill('project-104');
+  assert.equal(await page.locator('.remote-repo').count(), 1);
+  assert.equal(await hub.evaluate((el) => el.scrollWidth <= el.clientWidth), true);
+  await page.getByRole('button', { name: '退出登录' }).click();
+  await page.getByRole('button', { name: '登录 GitHub', exact: true }).waitFor();
+  assert.equal(await page.locator('.remote-repo').count(), 0);
+  await page.getByRole('button', { name: '关闭仓库连接' }).click();
   assert.deepEqual(errors, []);
   await writeFile(
     'test-results/smoke.json',
@@ -199,6 +329,20 @@ try {
           'offline remote cache',
           'remote cache deletion',
           'GitHub login entry',
+          'remote tab arrow and Home/End keys',
+          'remote focus trap and restoration',
+          'remote minimum-window layout',
+          'reduced-motion remote entry',
+          'current remote cache deletion protection',
+          'real public GitHub refresh',
+          'missing GCM notice (simulated)',
+          'device-code cancellation and busy focus (simulated)',
+          'repository pagination, filtering, private labels and logout (simulated)',
+        ],
+        notVerified: [
+          'real account device authorization',
+          'private repository clone',
+          'Windows 11 GPU/DPI/Mica manual review',
         ],
         screenshots: ['overview', 'timeline', 'growth-view', 'dark-mode', 'commit-detail'],
       },
@@ -208,6 +352,19 @@ try {
   );
   console.log('Native Electron smoke test passed.');
 } catch (error) {
+  // Publish only a minimal outcome; screenshots and body text remain runner-local.
+  await writeFile(
+    'test-results/smoke.json',
+    JSON.stringify(
+      {
+        passed: false,
+        platform: process.platform,
+        message: 'Desktop smoke failed; inspect the failing step logs.',
+      },
+      null,
+      2,
+    ),
+  );
   const page = await app.firstWindow().catch(() => null);
   if (page) {
     await page.screenshot({ path: 'test-results/failure.png', fullPage: false }).catch(() => {});

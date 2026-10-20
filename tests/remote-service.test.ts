@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile, symlink, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parseGitHubURL, RemoteService, type GitRunner } from '../electron/remote-service';
+import { parseGitHubURL, RemoteService, runGit, type GitRunner } from '../electron/remote-service';
 import type { RemoteProgress } from '../src/core/model';
 import { GitAtlasFailure } from '../electron/errors';
 const roots: string[] = [];
@@ -161,6 +161,82 @@ describe('GitHub credentials and account data', () => {
 });
 
 describe('managed remote cache', () => {
+  it('returns the same canonical path when the application root has an alias', async () => {
+    const folder = await root();
+    const alias = join(await root(), 'alias');
+    await symlink(folder, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    const service = new RemoteService(
+      alias,
+      () => {},
+      async (args) => {
+        if (args.includes('clone')) await mkdir(args.at(-1)!, { recursive: true });
+        return '';
+      },
+    );
+    await service.initialize();
+    const id = parseGitHubURL('https://github.com/example/project').id;
+    const downloaded = await service.download('https://github.com/example/project');
+    expect(downloaded).toBe(await realpath(join(folder, 'repositories', id)));
+    expect(await service.cachePath(id)).toBe(downloaded);
+    await service.removeCache(id);
+    expect(await readdir(join(folder, 'repositories'))).toEqual([]);
+  });
+  it('cleans failed clone files without registering a cache', async () => {
+    const folder = await root();
+    const service = new RemoteService(
+      folder,
+      () => {},
+      async (args) => {
+        await mkdir(args.at(-1)!, { recursive: true });
+        await writeFile(join(args.at(-1)!, 'partial'), 'partial download');
+        throw new GitAtlasFailure('REMOTE_FAILED', 'failed');
+      },
+    );
+    await service.initialize();
+    await expect(service.download('https://github.com/example/project')).rejects.toMatchObject({
+      code: 'REMOTE_FAILED',
+    });
+    expect(service.listCaches()).toEqual([]);
+    expect(await readdir(join(folder, 'repositories'))).toEqual([]);
+  });
+  it('cancels an active download and prevents overlapping operations', async () => {
+    const folder = await root();
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const service = new RemoteService(
+      folder,
+      () => {},
+      async (args, options) => {
+        await mkdir(args.at(-1)!, { recursive: true });
+        return new Promise((_resolve, reject) => {
+          options.signal?.addEventListener(
+            'abort',
+            () => reject(new GitAtlasFailure('CANCELLED', 'cancelled')),
+            { once: true },
+          );
+          started();
+        });
+      },
+    );
+    await service.initialize();
+    const pending = service.download('https://github.com/example/project');
+    const result = expect(pending).rejects.toMatchObject({ code: 'CANCELLED' });
+    await ready;
+    await expect(service.download('https://github.com/example/other')).rejects.toMatchObject({
+      code: 'BUSY',
+    });
+    service.cancel();
+    await result;
+    expect(service.listCaches()).toEqual([]);
+    expect(await readdir(join(folder, 'repositories'))).toEqual([]);
+  });
+  it('reports a missing Git executable explicitly', async () => {
+    await expect(runGit(['--version'], { cwd: await root(), env: { PATH: '' } })).rejects.toMatchObject({
+      code: 'GIT_NOT_FOUND',
+    });
+  });
   it('downloads atomically without checkout, updates the existing cache and deletes only a registered cache', async () => {
     const folder = await root();
     const calls: string[][] = [];

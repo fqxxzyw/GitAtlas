@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   Github,
   Link,
@@ -48,30 +49,41 @@ export function RemoteHub({
   const panel = useRef<HTMLElement>(null);
   const statusPanel = useRef<HTMLDivElement>(null);
   const mounted = useRef(true);
+  const reducedMotion = useReducedMotion();
   const api = window.gitAtlas;
   useEffect(() => {
-    if (busy) statusPanel.current?.scrollIntoView({ block: 'nearest' });
+    if (busy) {
+      statusPanel.current?.scrollIntoView({ block: 'nearest' });
+      statusPanel.current?.querySelector<HTMLButtonElement>('[data-cancel]')?.focus();
+    }
   }, [busy, progress?.deviceCode]);
   const unwrap = <T,>(result: Result<T>): T => {
     if (!result.ok) throw new Error(result.error.message);
     return result.data;
   };
-  const run = useCallback(async (fn: () => Promise<void>) => {
-    setBusy(true);
-    setError('');
-    setProgress(null);
-    setCopied(false);
-    try {
-      await fn();
-    } catch (err) {
-      if (mounted.current) setError(err instanceof Error ? err.message : '操作未完成，请重试。');
-    } finally {
-      if (mounted.current) {
-        setBusy(false);
-        setProgress(null);
+  const run = useCallback(
+    async (fn: () => Promise<void>) => {
+      setBusy(true);
+      setError('');
+      setProgress(null);
+      setCopied(false);
+      try {
+        await fn();
+      } catch (err) {
+        if (mounted.current) setError(err instanceof Error ? err.message : '操作未完成，请重试。');
+      } finally {
+        if (mounted.current) {
+          setBusy(false);
+          setProgress(null);
+          // A clone can succeed even when its subsequent history scan is cancelled.
+          void api?.remoteCaches().then((r) => {
+            if (mounted.current && r.ok) setCaches(r.data);
+          });
+        }
       }
-    }
-  }, []);
+    },
+    [api],
+  );
   useEffect(() => {
     mounted.current = true;
     if (!api) return;
@@ -111,15 +123,19 @@ export function RemoteHub({
       }
       if (event.key !== 'Tab') return;
       const items = Array.from(
-        panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),a[href]') ??
-          [],
+        panel.current?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled):not([tabindex="-1"]),input:not(:disabled),a[href]',
+        ) ?? [],
       );
       const first = items[0],
         last = items.at(-1);
       if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) {
         event.preventDefault();
         last?.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (
+        !event.shiftKey &&
+        (document.activeElement === last || !panel.current?.contains(document.activeElement))
+      ) {
         event.preventDefault();
         first?.focus();
       }
@@ -156,8 +172,11 @@ export function RemoteHub({
         if (!busy) onClose();
       }}
     >
-      <section
+      <motion.section
         className="panel remote-hub"
+        initial={reducedMotion ? false : { opacity: 0, scale: 0.97, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 340, damping: 30 }}
         ref={panel}
         tabIndex={-1}
         role="dialog"
@@ -189,12 +208,34 @@ export function RemoteHub({
             <button
               key={t.id}
               role="tab"
+              id={`remote-tab-${t.id}`}
+              aria-controls="remote-content"
               aria-selected={tab === t.id}
+              tabIndex={tab === t.id ? 0 : -1}
               disabled={busy}
               className={tab === t.id ? 'selected' : ''}
               onClick={() => {
                 setTab(t.id);
                 setError('');
+              }}
+              onKeyDown={(event) => {
+                const ids = ['link', 'github', 'cache'] as const;
+                const index = ids.indexOf(t.id);
+                const next =
+                  event.key === 'ArrowRight'
+                    ? (index + 1) % 3
+                    : event.key === 'ArrowLeft'
+                      ? (index + 2) % 3
+                      : event.key === 'Home'
+                        ? 0
+                        : event.key === 'End'
+                          ? 2
+                          : -1;
+                if (next < 0) return;
+                event.preventDefault();
+                setTab(ids[next]);
+                setError('');
+                document.getElementById(`remote-tab-${ids[next]}`)?.focus();
               }}
             >
               <t.icon size={16} />
@@ -205,7 +246,12 @@ export function RemoteHub({
         {!api && (
           <div className="remote-notice">连接 GitHub 需要 Windows 桌面版。网页预览支持历史 JSON 与演示。</div>
         )}
-        <div className="remote-body">
+        <div
+          className="remote-body"
+          id="remote-content"
+          role="tabpanel"
+          aria-labelledby={`remote-tab-${tab}`}
+        >
           {tab === 'link' && (
             <div className="remote-link-view">
               <label htmlFor="github-url">GitHub 仓库链接</label>
@@ -349,7 +395,7 @@ export function RemoteHub({
                           <Github size={19} />
                           <span>
                             <strong>
-                              {r.fullName} {r.private && <LockKeyhole size={12} />}
+                              {r.fullName} {r.private && <LockKeyhole size={12} aria-label="私有仓库" />}
                             </strong>
                             <small>{r.description || '尚无仓库描述'}</small>
                           </span>
@@ -516,6 +562,7 @@ export function RemoteHub({
               )}
               <button
                 className="text-button"
+                data-cancel
                 onClick={() => {
                   void api?.remoteCancel();
                 }}
@@ -529,7 +576,7 @@ export function RemoteHub({
           <LockKeyhole size={13} />
           仅在你连接或更新时访问 GitHub · 历史分析在本地完成
         </footer>
-      </section>
+      </motion.section>
     </div>
   );
 }
