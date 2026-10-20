@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile, symlink, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseGitHubURL, RemoteService, type GitRunner } from '../electron/remote-service';
@@ -179,14 +179,14 @@ describe('managed remote cache', () => {
     await service.initialize();
     const path = await service.download('https://github.com/example/project');
     const id = parseGitHubURL('https://github.com/example/project').id;
-    expect(path).toBe(join(folder, 'repositories', id));
+    expect(path).toBe(await realpath(join(folder, 'repositories', id)));
     const clone = calls.find((c) => c.includes('clone'))!;
     expect(clone).toContain('--no-checkout');
     expect(clone).toContain('--no-recurse-submodules');
     expect(clone).toContain('credential.helper=');
     expect(clone).not.toContain('credential.helper=manager');
     expect(await service.cachePath(id)).toBe(path);
-    await service.download('https://github.com/example/project.git');
+    expect(await service.download('https://github.com/example/project.git')).toBe(path);
     expect(calls.some((c) => c.includes('fetch'))).toBe(true);
     expect(calls.some((c) => c.includes('update-ref'))).toBe(true);
     expect(calls.flat()).not.toContain('push');

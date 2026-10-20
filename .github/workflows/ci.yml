@@ -23,6 +23,7 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - run: npm run test:ui
+        id: smoke
         env:
           GITATLAS_EXECUTABLE: release/win-unpacked/GitAtlas.exe
       - name: Checksums
@@ -37,7 +38,7 @@ jobs:
             release/SHA256SUMS.txt
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && steps.smoke.outcome != 'skipped' && hashFiles('test-results/smoke.json') != ''
         with:
           name: GitAtlas-verification
           path: test-results/smoke.json

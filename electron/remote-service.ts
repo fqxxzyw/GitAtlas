@@ -476,7 +476,9 @@ export class RemoteService {
           ...this.caches.filter((c) => c.id !== repo.id),
         ];
         await this.saveCaches();
-        return destination;
+        // Match offline opens and deletion guards, including Windows 8.3 aliases.
+        // Reuse the boundary check rather than returning an unchecked path.
+        return await this.cachePath(repo.id);
       } catch (error) {
         await rm(temporary, { recursive: true, force: true });
         throw error;
