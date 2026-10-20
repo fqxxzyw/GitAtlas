@@ -102,7 +102,7 @@ describe('GitHub credentials and account data', () => {
     expect(await readFile(join(folder, 'account.json'), 'utf8')).not.toContain('private-test-token');
     for (const call of calls) {
       expect(call.env.GCM_NAMESPACE).toBe('GitAtlas');
-      expect(call.env.GIT_CONFIG_GLOBAL).toBe(join(folder, 'gitconfig'));
+      expect(call.env.GIT_CONFIG_GLOBAL).toBe(join(await realpath(folder), 'gitconfig'));
       expect(call.env.GIT_CONFIG_NOSYSTEM).toBe('1');
       expect(call.env.GCM_TRACE_SECRETS).toBe('0');
       expect(call.args.join(' ')).not.toContain('private-test-token');
@@ -161,6 +161,39 @@ describe('GitHub credentials and account data', () => {
 });
 
 describe('managed remote cache', () => {
+  it('rejects a redirected cache root at initialization', async () => {
+    const folder = await root();
+    const outside = await root();
+    await symlink(outside, join(folder, 'repositories'), process.platform === 'win32' ? 'junction' : 'dir');
+    const service = new RemoteService(folder, () => {});
+    await expect(service.initialize()).rejects.toMatchObject({ code: 'CACHE_MISSING' });
+    expect(await readdir(outside)).toEqual([]);
+  });
+  it('refuses reads, refreshes and deletion after the cache root is replaced', async () => {
+    const folder = await root();
+    const outside = await root();
+    const service = new RemoteService(
+      folder,
+      () => {},
+      async (args) => {
+        if (args.includes('clone')) await mkdir(args.at(-1)!, { recursive: true });
+        return '';
+      },
+    );
+    await service.initialize();
+    await service.download('https://github.com/example/project');
+    const id = service.listCaches()[0].id;
+    await mkdir(join(outside, id));
+    await writeFile(join(outside, id, 'keep'), 'external file');
+    await rm(join(folder, 'repositories'), { recursive: true });
+    await symlink(outside, join(folder, 'repositories'), process.platform === 'win32' ? 'junction' : 'dir');
+    await expect(service.cachePath(id)).rejects.toMatchObject({ code: 'CACHE_MISSING' });
+    await expect(service.download('https://github.com/example/project')).rejects.toMatchObject({
+      code: 'CACHE_MISSING',
+    });
+    await expect(service.removeCache(id)).rejects.toMatchObject({ code: 'CACHE_MISSING' });
+    expect(await readFile(join(outside, id, 'keep'), 'utf8')).toBe('external file');
+  });
   it('returns the same canonical path when the application root has an alias', async () => {
     const folder = await root();
     const alias = join(await root(), 'alias');

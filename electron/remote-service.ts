@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename, rm, realpath } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, rm, realpath, lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { GitAtlasFailure } from './errors';
@@ -130,6 +130,7 @@ export class RemoteService {
   private token?: string;
   private account: GitHubAccount | null = null;
   private caches: RemoteCache[] = [];
+  private repositoriesRoot = '';
   constructor(
     private root: string,
     private progress: (p: RemoteProgress) => void,
@@ -138,7 +139,11 @@ export class RemoteService {
   ) {}
   async initialize() {
     await mkdir(this.root, { recursive: true });
+    this.root = await realpath(this.root);
     await mkdir(join(this.root, 'repositories'), { recursive: true });
+    if ((await lstat(join(this.root, 'repositories'))).isSymbolicLink())
+      throw new GitAtlasFailure('CACHE_MISSING', 'Cache root is redirected');
+    this.repositoriesRoot = await realpath(join(this.root, 'repositories'));
     // Isolated Git config: no user helper chains, trace destinations, hooks or URL rewrites.
     await writeFile(join(this.root, 'gitconfig'), '', { flag: 'a', mode: 0o600 });
     try {
@@ -369,11 +374,16 @@ export class RemoteService {
   }
   async cachePath(id: string) {
     if (!this.caches.some((c) => c.id === id)) throw new GitAtlasFailure('CACHE_MISSING', 'Unknown cache');
-    const path = join(this.root, 'repositories', id);
+    const path = join(await this.cacheRoot(), id);
     const canonical = await realpath(path);
-    if (canonical !== join(await realpath(join(this.root, 'repositories')), id))
-      throw new GitAtlasFailure('CACHE_MISSING', 'Cache path changed');
+    if (canonical !== path) throw new GitAtlasFailure('CACHE_MISSING', 'Cache path changed');
     return canonical;
+  }
+  private async cacheRoot() {
+    const path = join(this.root, 'repositories');
+    if ((await lstat(path)).isSymbolicLink() || (await realpath(path)) !== this.repositoriesRoot)
+      throw new GitAtlasFailure('CACHE_MISSING', 'Cache root changed');
+    return this.repositoriesRoot;
   }
   async removeCache(id: string) {
     return this.exclusive(async () => {
@@ -389,8 +399,9 @@ export class RemoteService {
       const existing = this.caches.find((c) => c.id === repo.id);
       if (!existing && this.caches.length >= 100)
         throw new GitAtlasFailure('CACHE_LIMIT', 'Too many cached repositories');
-      const destination = join(this.root, 'repositories', repo.id);
-      const temporary = join(this.root, 'repositories', `pending-${randomUUID()}`);
+      const cacheRoot = await this.cacheRoot();
+      const destination = join(cacheRoot, repo.id);
+      const temporary = join(cacheRoot, `pending-${randomUUID()}`);
       const authentication = this.account
         ? ['-c', 'credential.helper=manager', '-c', `credential.username=${this.account.login}`]
         : [];
